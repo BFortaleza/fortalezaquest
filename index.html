@@ -1,0 +1,1108 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fortaleza Quest - Rocket Update</title>
+    <style>
+        :root {
+            --c0: #0f380f; 
+            --c1: #306230; 
+            --c2: #8bac0f; 
+            --c3: #9bbc0f; 
+            --gold: #f1c40f;      
+            --heart: #ff7675;     
+            --card: #0984e3;      /* Azul Tarjeta */
+            --text: #2d3436;      
+        }
+
+        @font-face {
+            font-family: 'Pixel';
+            src: url('https://fonts.cdnfonts.com/s/11696/PressStart2P-Regular.woff') format('woff');
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #111;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            color: var(--text);
+            font-family: 'Pixel', 'Courier New', monospace;
+            overflow: hidden;
+        }
+
+        #game-wrapper {
+            position: relative;
+            width: min(800px, 95vw, 95vh * 4 / 3);
+            aspect-ratio: 4 / 3;
+            background-color: #87CEEB;
+            border: 4px solid #2d3436;
+            box-shadow: 0 0 50px rgba(0,0,0,0.8);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+            image-rendering: pixelated;
+        }
+
+        /* UI */
+        .ui-layer {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            padding: 20px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            z-index: 20;
+        }
+
+        .hud-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            width: 100%;
+            text-shadow: 2px 2px 0 rgba(0,0,0,0.5);
+        }
+
+        .hud-left { display: flex; flex-direction: column; gap: 8px; }
+        
+        .hearts-container {
+            font-size: 24px;
+            color: var(--heart);
+            letter-spacing: 2px;
+            filter: drop-shadow(0 0 5px var(--heart));
+        }
+
+        .boss-health-container {
+            display: none; 
+            flex-direction: column;
+            align-items: flex-end;
+        }
+
+        .boss-label { 
+            font-size: 10px; color: #fff; margin-bottom: 4px; 
+            font-weight: bold; text-shadow: 1px 1px #000; 
+            background: rgba(0,0,0,0.5); padding: 2px 5px; border-radius: 4px;
+        }
+        
+        .boss-bar-bg {
+            width: 150px; height: 14px;
+            background: #2d3436;
+            border: 2px solid #fff;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .boss-bar-fill {
+            height: 100%; width: 100%;
+            background: linear-gradient(90deg, #e74c3c, #c0392b);
+            transition: width 0.2s;
+        }
+
+        .hud-text {
+            font-size: 14px;
+            color: #fff;
+            font-weight: bold;
+            background: rgba(0,0,0,0.3);
+            padding: 5px 10px;
+            border-radius: 15px;
+        }
+
+        .progress-bar-bg {
+            width: 100%;
+            height: 10px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 5px;
+            overflow: hidden;
+            margin-top: 5px;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: #f1c40f; 
+            width: 0%;
+            box-shadow: 0 0 10px #f1c40f;
+            transition: width 0.1s linear;
+        }
+
+        /* Pantallas */
+        #overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(5px);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 50;
+            text-align: center;
+            pointer-events: auto;
+        }
+
+        h1 { 
+            font-size: 40px; margin-bottom: 10px; 
+            color: #f1c40f; 
+            text-shadow: 0 0 20px rgba(241, 196, 15, 0.8);
+            line-height: 1.2;
+            text-align: center;
+        }
+        
+        p { 
+            font-size: 12px; margin-bottom: 30px; line-height: 1.6; 
+            color: #fff; max-width: 80%;
+            text-shadow: 1px 1px 4px #000;
+            text-align: center;
+        }
+
+        button {
+            background: linear-gradient(to bottom, #2ecc71, #27ae60); 
+            color: #fff;
+            border: none; padding: 15px 40px;
+            font-family: inherit; font-size: 18px;
+            cursor: pointer; text-transform: uppercase;
+            border-radius: 50px;
+            box-shadow: 0 5px 15px rgba(46, 204, 113, 0.4);
+            transition: transform 0.1s, box-shadow 0.1s;
+        }
+        button:hover { transform: translateY(-3px); box-shadow: 0 8px 20px rgba(46, 204, 113, 0.6); }
+        button:active { transform: translateY(2px); }
+
+        #dialog-box {
+            position: absolute; bottom: 30px; left: 50%;
+            transform: translateX(-50%); width: 85%;
+            background: rgba(255,255,255,0.95); 
+            border: 4px solid #2d3436;
+            padding: 20px; display: none;
+            font-size: 14px; line-height: 1.5; color: #2d3436;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5); z-index: 100;
+            text-align: center;
+        }
+
+        #warning-msg {
+            position: absolute; top: 40%; left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 50px; color: #e74c3c;
+            text-shadow: 0 0 20px rgba(231, 76, 60, 0.8);
+            display: none; animation: blink 0.4s infinite;
+            z-index: 40; text-align: center; font-weight: bold;
+        }
+
+        @keyframes blink { 50% { opacity: 0; } }
+        
+        .float-text {
+            position: absolute; font-weight: bold; font-size: 16px;
+            animation: floatUp 1s forwards; pointer-events: none;
+            text-shadow: 0 0 5px rgba(255,255,255,0.8); z-index: 60;
+        }
+        @keyframes floatUp {
+            0% { transform: translateY(0) scale(1); opacity: 1; }
+            100% { transform: translateY(-50px) scale(1.2); opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-wrapper">
+        <canvas id="gameCanvas"></canvas>
+        <div id="warning-msg">¡JEFE ENTRANTE!</div>
+        
+        <div class="ui-layer">
+            <div id="hud">
+                <div class="hud-top">
+                    <div class="hud-left">
+                        <div class="hearts-container" id="hearts-display">❤️❤️❤️</div>
+                        <span class="hud-text">DIST: <span id="score-display">0</span>m</span>
+                    </div>
+                    
+                    <div class="boss-health-container" id="boss-hud">
+                        <span class="boss-label">GENERAL CERDO</span>
+                        <div class="boss-bar-bg"><div class="boss-bar-fill" id="boss-fill"></div></div>
+                    </div>
+                </div>
+                <div class="progress-bar-bg">
+                    <div class="progress-bar-fill" id="progress-fill"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="overlay">
+            <h1>FORTALEZA<br>QUEST</h1>
+            <p>
+                <b>MISIÓN:</b> RECUPERAR LA ECONOMÍA.<br>
+                <b>META:</b> 2000 METROS.<br><br>
+                Click Corto: <b>Salto Pequeño</b><br>
+                Click Largo: <b>Salto Alto</b><br>
+                [💳] TARJETA: <b>MODO COHETE INVENCIBLE</b><br>
+            </p>
+            <button onclick="startGame()">JUGAR AHORA</button>
+        </div>
+
+        <div id="dialog-box"></div>
+    </div>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    const GAME_W = 320; 
+    const GAME_H = 240;
+    canvas.width = GAME_W;
+    canvas.height = GAME_H;
+
+    // Colores Palette
+    const C_GRASS = '#2ecc71';
+    const C_GROUND = '#27ae60';
+    const C_ELEPHANT = '#ecf0f1'; 
+    const C_GOLD = '#f1c40f';
+    const C_RED = '#e74c3c';
+    const C_WHITE = '#ffffff';
+    const C_BLACK = '#2d3436';
+    const C_CARD = '#0984e3';
+
+    // Ciclo Día/Noche
+    const SKY_DAY = {r: 135, g: 206, b: 235}; // #87CEEB
+    const SKY_NIGHT = {r: 20, g: 20, b: 60};  // #14143C
+    
+    let state = 'MENU'; 
+    let frame = 0;
+    let score = 0;
+    let speed = 1.8; 
+    const MAX_SPEED = 4.0; 
+    let bossEntryPhase = false; 
+    let startTime = 0;
+    let screenShake = 0;
+    
+    let player = { 
+        x: 40, y: 0, w: 24, h: 20, dy: 0, grounded: false, dir: 1,
+        hp: 3, maxHp: 3, invulnerable: 0,
+        rocketTimer: 0 // Nuevo estado de cohete
+    }; 
+    
+    let obstacles = [];
+    let bullets = []; 
+    let enemyBullets = []; 
+    let clouds = [];
+    let mountains = [];
+    let items = []; 
+    let particles = [];
+    let dollars = []; 
+    
+    let boss = { 
+        x: GAME_W + 100, y: 60, w: 50, h: 50, hp: 10, maxHp: 10, 
+        active: false, enraged: false 
+    }; 
+    
+    // --- FÍSICAS FLOTANTES (CONTROL TOTAL) ---
+    const GRAVITY = 0.25; 
+    const JUMP_FORCE = -7.2; 
+    const GROUND_Y = GAME_H - 32;
+    const TARGET_SCORE = 2000; 
+
+    let isJumping = false;
+
+    function drawRect(x, y, w, h, c) {
+        ctx.fillStyle = c;
+        ctx.fillRect(Math.floor(x), Math.floor(y), w, h);
+    }
+
+    // --- EFECTOS VISUALES ---
+    function drawSky() {
+        let cycle = (score % 2000) / 2000; 
+        
+        let r, g, b;
+        let isNight = false;
+
+        if (cycle < 0.4) { 
+            r = SKY_DAY.r; g = SKY_DAY.g; b = SKY_DAY.b;
+        } else if (cycle < 0.5) { 
+            let t = (cycle - 0.4) * 10; 
+            r = SKY_DAY.r + (SKY_NIGHT.r - SKY_DAY.r) * t;
+            g = SKY_DAY.g + (SKY_NIGHT.g - SKY_DAY.g) * t;
+            b = SKY_DAY.b + (SKY_NIGHT.b - SKY_DAY.b) * t;
+        } else if (cycle < 0.9) { 
+            r = SKY_NIGHT.r; g = SKY_NIGHT.g; b = SKY_NIGHT.b;
+            isNight = true;
+        } else { 
+            let t = (cycle - 0.9) * 10;
+            r = SKY_NIGHT.r + (SKY_DAY.r - SKY_NIGHT.r) * t;
+            g = SKY_NIGHT.g + (SKY_DAY.g - SKY_NIGHT.g) * t;
+            b = SKY_NIGHT.b + (SKY_DAY.b - SKY_NIGHT.b) * t;
+        }
+
+        ctx.fillStyle = `rgb(${r},${g},${b})`;
+        ctx.fillRect(0, 0, GAME_W, GAME_H);
+
+        let centerX = GAME_W / 2;
+        let centerY = GAME_H * 1.5; 
+        let radius = GAME_H * 1.4;
+
+        let sunAng = Math.PI + (cycle * Math.PI * 2); 
+        let moonAng = sunAng + Math.PI;
+
+        let sx = centerX + Math.cos(sunAng) * radius;
+        let sy = centerY + Math.sin(sunAng) * radius;
+        
+        let mx = centerX + Math.cos(moonAng) * radius;
+        let my = centerY + Math.sin(moonAng) * radius;
+
+        if (sy < GAME_H + 50) {
+            ctx.shadowBlur = 40; ctx.shadowColor = '#f39c12';
+            ctx.fillStyle = '#f1c40f';
+            ctx.beginPath(); ctx.arc(sx, sy, 25, 0, Math.PI*2); ctx.fill();
+            ctx.shadowBlur = 0;
+        }
+
+        if (my < GAME_H + 50) {
+            ctx.shadowBlur = 20; ctx.shadowColor = '#ffffff';
+            ctx.fillStyle = '#ecf0f1';
+            ctx.beginPath(); ctx.arc(mx, my, 20, 0, Math.PI*2); ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#bdc3c7'; 
+            ctx.beginPath(); ctx.arc(mx+6, my-4, 5, 0, Math.PI*2); ctx.fill();
+        }
+
+        if (isNight) {
+            ctx.fillStyle = 'rgba(255,255,255,0.7)';
+            for(let i=0; i<30; i++) {
+                if ((frame + i*10) % 150 > 70) { 
+                    let sx = (i * 37) % GAME_W;
+                    let sy = (i * 23) % (GAME_H/2);
+                    ctx.fillRect(sx, sy, 1, 1);
+                }
+            }
+        }
+    }
+
+    function createParticles(x, y, color, count = 5) {
+        for(let i=0; i<count; i++) {
+            particles.push({
+                x: x, y: y,
+                vx: (Math.random() - 0.5) * 6,
+                vy: (Math.random() - 0.5) * 6,
+                life: 30,
+                color: color
+            });
+        }
+    }
+
+    function drawParticles() {
+        for(let i=particles.length-1; i>=0; i--) {
+            let p = particles[i];
+            ctx.fillStyle = p.color;
+            ctx.fillRect(p.x, p.y, 2, 2);
+            p.x += p.vx;
+            p.y += p.vy;
+            p.life--;
+            if(p.life <= 0) particles.splice(i, 1);
+        }
+    }
+
+    function spawnDollars(x, y) {
+        for(let i=0; i<50; i++) {
+            dollars.push({
+                x: x, y: y,
+                vx: (Math.random() - 0.5) * 10,
+                vy: -5 - Math.random() * 5,
+                w: 8, h: 4
+            });
+        }
+    }
+
+    function drawDollars() {
+        for(let i=0; i<dollars.length; i++) {
+            let d = dollars[i];
+            d.x += d.vx;
+            d.y += d.vy;
+            d.vy += 0.3; 
+            if(d.y > GROUND_Y) { d.y = GROUND_Y; d.vx *= 0.6; d.vy *= -0.3; }
+            
+            ctx.fillStyle = '#2ecc71';
+            ctx.fillRect(d.x, d.y, d.w, d.h);
+            ctx.fillStyle = '#27ae60'; 
+            ctx.fillRect(d.x+2, d.y+1, d.w-4, d.h-2);
+        }
+    }
+
+    function drawLighting() {
+        let vig = ctx.createRadialGradient(GAME_W/2, GAME_H/2, GAME_W/3, GAME_W/2, GAME_H/2, GAME_W);
+        vig.addColorStop(0, 'rgba(0,0,0,0)');
+        vig.addColorStop(1, 'rgba(0,0,0,0.4)');
+        ctx.fillStyle = vig;
+        ctx.fillRect(0, 0, GAME_W, GAME_H);
+    }
+
+    // --- SPRITE ELEFANTE ---
+    function drawElephant(x, y, isWalking) {
+        // En modo cohete, no parpadea, brilla
+        if (player.rocketTimer > 0) {
+            ctx.shadowBlur = 10; ctx.shadowColor = '#00ffff';
+        } else {
+            if (player.invulnerable > 0 && Math.floor(frame / 4) % 2 === 0) return;
+        }
+
+        let cycle = isWalking ? Math.floor(frame / 8) % 4 : 0;
+        let bounce = isWalking ? (cycle % 2 === 0 ? 0 : -1) : 0;
+        y += bounce;
+
+        let flip = (state === 'MENU' && player.dir === -1);
+        ctx.save();
+        if (flip) { ctx.translate(x + 24, y); ctx.scale(-1, 1); x = 0; }
+
+        // Si es cohete, inclinar un poco
+        if (player.rocketTimer > 0) {
+            ctx.translate(x + 15, y + 10);
+            ctx.rotate(-0.1);
+            ctx.translate(-(x + 15), -(y + 10));
+            // Fuego cohete
+            if (frame % 4 < 2) {
+                drawRect(x - 8, y + 10, 8, 6, '#e67e22');
+                drawRect(x - 12, y + 12, 4, 2, '#f1c40f');
+            }
+        }
+
+        // Cuerpo
+        drawRect(x + 2, y + 8, 18, 12, C_BLACK); 
+        drawRect(x + 3, y + 9, 16, 10, C_ELEPHANT); 
+        drawRect(x + 5, y + 9, 10, 3, '#fff'); 
+
+        // Cabeza
+        drawRect(x + 12, y + 2, 12, 12, C_BLACK);
+        drawRect(x + 13, y + 3, 10, 10, C_ELEPHANT);
+
+        let earFlap = isWalking ? (Math.floor(frame/12)%2) : 0;
+        drawRect(x + 10, y + 4, 6 - earFlap, 8, C_BLACK); 
+        drawRect(x + 11, y + 5, 4 - earFlap, 6, '#ffcdd2'); 
+
+        // Trompa
+        drawRect(x + 21, y + 6, 4, 6, C_BLACK); 
+        drawRect(x + 22, y + 6, 2, 6, C_ELEPHANT); 
+        
+        if (isWalking) {
+             drawRect(x + 23, y + 12, 4, 4, C_BLACK); 
+             drawRect(x + 23, y + 12, 2, 2, C_ELEPHANT); 
+             drawRect(x + 24, y + 10, 4, 2, C_BLACK); 
+             drawRect(x + 24, y + 10, 2, 2, C_ELEPHANT); 
+        } else {
+             drawRect(x + 21, y + 12, 4, 4, C_BLACK); 
+             drawRect(x + 22, y + 12, 2, 4, C_ELEPHANT); 
+        }
+
+        drawRect(x + 18, y + 5, 2, 3, C_WHITE);
+        drawRect(x + 19, y + 6, 1, 1, C_BLACK);
+
+        let legL = (cycle === 1) ? -1 : 0;
+        let legR = (cycle === 3) ? 1 : 0;
+        
+        drawRect(x + 4 + legL, y + 18, 4, 4, C_BLACK); 
+        drawRect(x + 5 + legL, y + 18, 2, 3, C_ELEPHANT);
+        drawRect(x + 14 + legR, y + 18, 4, 4, C_BLACK); 
+        drawRect(x + 15 + legR, y + 18, 2, 3, C_ELEPHANT);
+
+        drawRect(x, y + 10, 2, 2, C_ELEPHANT);
+
+        ctx.restore();
+        ctx.shadowBlur = 0; // Reset
+    }
+
+    // --- OBJETOS ---
+    function drawItem(i) {
+        let x = i.x, y = i.y;
+        
+        ctx.shadowBlur = 15;
+        
+        if (i.type === 'COIN') {
+            ctx.shadowColor = C_GOLD;
+            let spin = Math.floor(frame / 8) % 4;
+            let w = (spin === 0 || spin === 2) ? 12 : 6;
+            drawRect(x + (12-w)/2, y, w, 12, C_GOLD);
+            drawRect(x + (12-w)/2 + 2, y + 2, w - 4, 8, '#fff'); 
+        } else if (i.type === 'HEART') {
+            ctx.shadowColor = C_RED;
+            let beat = (frame % 30 < 15) ? 0 : 1;
+            drawRect(x - beat, y - beat, 14 + beat, 12 + beat, C_RED);
+            drawRect(x + 2, y + 2, 3, 3, C_WHITE); 
+        } else if (i.type === 'AMMO') {
+            ctx.shadowColor = '#e67e22';
+            drawRect(x + 4, y, 8, 14, '#ecf0f1'); 
+            drawRect(x + 4, y, 1, 14, C_BLACK);
+            drawRect(x + 11, y, 1, 14, C_BLACK);
+            drawRect(x + 4, y - 4, 8, 4, C_RED); 
+            drawRect(x + 6, y - 6, 4, 2, C_RED);
+            drawRect(x + 1, y + 10, 3, 4, '#7f8c8d'); 
+            drawRect(x + 12, y + 10, 3, 4, '#7f8c8d');
+        } else if (i.type === 'CARD') {
+            // TARJETA DE CREDITO AZUL
+            ctx.shadowColor = C_CARD;
+            drawRect(x, y, 16, 10, C_CARD);
+            drawRect(x, y, 16, 1, '#fff');
+            drawRect(x+2, y+2, 3, 2, '#f1c40f'); // Chip
+            drawRect(x+2, y+6, 8, 1, '#fff'); // Texto
+        }
+        ctx.shadowBlur = 0; 
+    }
+
+    function drawObstacle(o) {
+        let x = o.x, y = o.y;
+        if (x > GAME_W || x + o.w < 0) return;
+
+        if (o.type === 'ROCK') {
+            drawRect(x + 2, y + 4, 12, 10, '#7f8c8d');
+            drawRect(x + 4, y + 6, 8, 6, '#95a5a6');
+            drawRect(x + 10, y + 4, 2, 2, '#fff');
+        } else if (o.type === 'BUSH') {
+            drawRect(x + 2, y + 6, 14, 8, '#27ae60');
+            drawRect(x + 3, y + 5, 4, 4, '#2ecc71');
+            drawRect(x + 8, y + 4, 4, 4, '#2ecc71');
+            drawRect(x + 11, y + 6, 4, 4, '#2ecc71');
+        } else if (o.type === 'CRATE') {
+            drawRect(x, y, 16, 16, '#d35400');
+            drawRect(x + 1, y + 1, 14, 14, '#e67e22');
+            drawRect(x + 2, y + 2, 12, 1, '#d35400');
+            drawRect(x + 2, y + 13, 12, 1, '#d35400');
+            drawRect(x + 2, y + 2, 12, 12, 'rgba(0,0,0,0.1)');
+        } else if (o.type === 'SPIKE') {
+            drawRect(x, y + 8, 16, 8, C_BLACK);
+            drawRect(x + 2, y, 2, 8, '#bdc3c7');
+            drawRect(x + 7, y, 2, 8, '#bdc3c7');
+            drawRect(x + 12, y, 2, 8, '#bdc3c7');
+        } else if (o.type === 'BIRD') {
+            let fly = Math.floor(frame / 6) % 2;
+            drawRect(x, y + 4, 14, 6, '#e67e22'); 
+            drawRect(x + 2, y + 2 - fly * 2, 4, 8, '#fff'); 
+            drawRect(x + 10, y + 2, 4, 4, '#2c3e50'); 
+            drawRect(x + 14, y + 4, 2, 2, '#f1c40f'); 
+        } else if (o.type === 'UFO') {
+            drawRect(x + 2, y + 6, 12, 6, '#9b59b6'); 
+            drawRect(x + 4, y, 8, 6, '#8e44ad'); 
+            drawRect(x + 5, y + 2, 2, 2, '#3498db'); 
+            if (frame % 8 < 4) {
+                drawRect(x + 2, y + 12, 2, 2, '#f1c40f');
+                drawRect(x + 12, y + 12, 2, 2, '#f1c40f');
+            }
+        }
+    }
+
+    function drawPig(x, y) {
+        let isEnraged = boss.enraged;
+        let uniformColor = isEnraged ? '#c0392b' : '#2c3e50'; 
+        let skinColor = isEnraged ? '#ff7675' : '#ffcdd2'; 
+
+        drawRect(x + 4, y + 16, 36, 24, C_BLACK); 
+        drawRect(x + 6, y + 18, 32, 20, uniformColor); 
+        drawRect(x + 10, y + 24, 4, 4, C_GOLD); 
+        drawRect(x + 8, y + 6, 28, 20, skinColor); 
+        drawRect(x + 6, y + 6, 2, 20, C_BLACK);  
+        drawRect(x + 36, y + 6, 2, 20, C_BLACK); 
+        drawRect(x + 16, y + 16, 12, 8, '#e57373'); 
+        drawRect(x + 18, y + 18, 2, 4, '#000');  
+        drawRect(x + 24, y + 18, 2, 4, '#000');  
+        drawRect(x + 10, y + 10, 6, 4, '#fff');
+        drawRect(x + 28, y + 10, 6, 4, '#fff');
+        drawRect(x + 12, y + 11, 2, 2, '#000');
+        drawRect(x + 30, y + 11, 2, 2, '#000');
+        drawRect(x + 2, y, 40, 6, uniformColor); 
+        drawRect(x + 20, y - 4, 4, 4, C_RED); 
+    }
+
+    function initBackground() {
+        mountains = [];
+        for(let i=0; i<6; i++) mountains.push({ x: i * 80, y: GROUND_Y, w: 60 + Math.random()*80, h: 40 + Math.random()*60 });
+        clouds = [];
+        for(let i=0; i<5; i++) clouds.push({ x: Math.random()*GAME_W, y: 20+Math.random()*80, speed: 0.1+Math.random()*0.2 });
+    }
+
+    function drawEnv() {
+        mountains.forEach(m => {
+            let x = Math.floor(m.x), y = Math.floor(m.y), h = Math.floor(m.h), w = Math.floor(m.w);
+            for(let i=0; i<h; i+=2) {
+                let rowW = w * (1 - i/h);
+                let rowX = x + (w - rowW)/2;
+                drawRect(rowX, y - i, rowW, 2, 'rgba(100, 100, 150, 0.3)'); 
+            }
+        });
+        clouds.forEach(c => {
+            let x = c.x, y = c.y;
+            drawRect(x + 8, y + 4, 24, 12, 'rgba(255,255,255,0.7)');
+            drawRect(x + 12, y, 10, 6, 'rgba(255,255,255,0.7)');
+            drawRect(x + 4, y + 6, 6, 8, 'rgba(255,255,255,0.7)');
+            drawRect(x + 30, y + 6, 6, 8, 'rgba(255,255,255,0.7)');
+        });
+    }
+
+    function reset() {
+        player.y = GROUND_Y - 40;
+        player.dy = 0;
+        player.hp = 3;
+        player.invulnerable = 0;
+        player.rocketTimer = 0; // Reset rocket
+        obstacles = [];
+        items = [];
+        bullets = [];
+        enemyBullets = [];
+        dollars = [];
+        score = 0;
+        speed = 1.8; 
+        boss.active = false;
+        boss.enraged = false;
+        boss.x = GAME_W + 100;
+        boss.hp = 10; 
+        bossEntryPhase = false;
+        state = 'PLAY';
+        frame = 0;
+        startTime = Date.now();
+        screenShake = 0;
+        
+        document.getElementById('hud').style.display = 'flex';
+        document.getElementById('boss-hud').style.display = 'none';
+        document.getElementById('overlay').style.display = 'none';
+        document.getElementById('dialog-box').style.display = 'none';
+        document.getElementById('warning-msg').style.display = 'none';
+        
+        updateHearts();
+        initBackground();
+    }
+
+    function updateHearts() {
+        let h = "";
+        for(let i=0; i<player.hp; i++) h += "❤️";
+        for(let i=player.hp; i<3; i++) h += "🖤";
+        document.getElementById('hearts-display').innerText = h;
+    }
+
+    function showFloatText(x, y, text, color) {
+        let el = document.createElement('div');
+        el.className = 'float-text';
+        el.innerText = text;
+        el.style.color = color;
+        let rect = canvas.getBoundingClientRect();
+        let scaleX = rect.width / GAME_W;
+        let scaleY = rect.height / GAME_H;
+        el.style.left = (rect.left + x * scaleX) + 'px';
+        el.style.top = (rect.top + y * scaleY) + 'px';
+        document.body.appendChild(el);
+        setTimeout(() => el.remove(), 800);
+    }
+
+    function spawn() {
+        if (state !== 'PLAY' && state !== 'BOSS') return;
+        if (bossEntryPhase) return; 
+
+        // SISTEMA DE SPAWN INTELIGENTE (1 por turno)
+        // Decidimos que spawnear: Item O Obstaculo, no ambos.
+        // Frecuencia base de spawn
+        let spawnRate = Math.floor(250 / speed);
+        if (state === 'BOSS') spawnRate = 60;
+
+        if (frame % spawnRate !== 0) return;
+
+        let r = Math.random();
+        let spawnedItem = false;
+
+        // 1. ITEMS (PRIORIDAD)
+        if (state === 'BOSS') {
+            // Boss siempre necesita ammo o vida
+            if (r > 0.4) {
+                 items.push({ x: GAME_W, y: GROUND_Y - 40 - Math.random()*20, w: 16, h: 14, type: 'AMMO', active: true });
+                 spawnedItem = true;
+            } else if (player.hp < 3 && r > 0.1) {
+                 items.push({ x: GAME_W, y: GROUND_Y - 40, w: 14, h: 12, type: 'HEART', active: true });
+                 spawnedItem = true;
+            }
+        } else {
+            // Fase Normal: Probabilidad de Item 30%
+            if (r > 0.70) {
+                // Seleccionar Item
+                let subR = Math.random();
+                let iType = 'COIN';
+                let iW = 10; let iH = 10;
+                
+                if (subR > 0.95) { // 5% Tarjeta
+                    iType = 'CARD'; iW = 16; iH = 10;
+                } else if (player.hp < 3 && subR > 0.7) { // Mas vida si herido
+                    iType = 'HEART'; iW = 14; iH = 12;
+                }
+                
+                // Altura aleatoria pero alcanzable
+                let iY = GROUND_Y - 30 - Math.random() * 40; 
+                items.push({ x: GAME_W, y: iY, w: iW, h: iH, type: iType, active: true });
+                spawnedItem = true;
+            }
+        }
+
+        // 2. OBSTACULOS (Solo si no spawneamos item)
+        // EXCEPCION: En Boss no spawneamos obstaculos normales aqui, el boss dispara.
+        if (state === 'PLAY' && !spawnedItem) {
+            let type = 'ROCK';
+            let yPos = GROUND_Y - 14; 
+            let w = 14, h = 12; 
+            
+            // Variedad Garantizada
+            // Mayor prob de aereos
+            let rObs = Math.random();
+            if (rObs > 0.75) { 
+                if (Math.random() > 0.5) {
+                    type = 'BIRD'; yPos = GROUND_Y - 45 - Math.random()*20; w = 16; h = 10;
+                } else {
+                    type = 'UFO'; yPos = GROUND_Y - 60 - Math.random()*10; w = 16; h = 10;
+                }
+            }
+            else if (rObs > 0.60) { type = 'SPIKE'; w = 16; h = 16; yPos = GROUND_Y - 16; }
+            else if (rObs > 0.40) { type = 'BUSH'; w = 18; h = 14; }
+            else if (rObs > 0.20) { type = 'CRATE'; w = 16; h = 16; yPos = GROUND_Y - 16; }
+            else { type = 'ROCK'; }
+
+            let obs = { x: GAME_W, y: yPos, w: w, h: h, type: type, active: true, startY: yPos };
+            obstacles.push(obs);
+        }
+    }
+
+    function update() {
+        frame++;
+        
+        if (screenShake > 0) screenShake--;
+
+        clouds.forEach(c => { c.x -= c.speed; if (c.x < -40) c.x = GAME_W; });
+        mountains.forEach(m => { if(state!=='MENU') m.x -= speed * 0.2; if (m.x + m.w < 0) { m.x = GAME_W; m.h = 30+Math.random()*50; }});
+
+        if (state === 'MENU') {
+            player.x += player.dir * 0.5;
+            if (player.x > GAME_W - 50) player.dir = -1;
+            if (player.x < 20) player.dir = 1;
+            return;
+        }
+
+        if (state === 'WIN_ANIM') {
+            if (frame % 5 === 0 && dollars.length < 100) {
+               spawnDollars(GAME_W/2 + (Math.random()-0.5)*100, GROUND_Y - 100);
+            }
+            return;
+        }
+
+        // --- LOGICA JUGADOR ---
+        if (player.rocketTimer > 0) {
+            // MODO COHETE
+            player.rocketTimer--;
+            player.y += (GAME_H/2 - player.y) * 0.1; // Flotar al centro
+            player.dy = 0;
+            createParticles(player.x, player.y + 10, '#e74c3c', 1);
+            speed = 8.0; // SUPER VELOCIDAD
+            score += 0.5; // Puntos extra rapido
+        } else {
+            // FISICA NORMAL
+            if (speed > 1.8 && frame % 10 === 0) speed -= 0.1; // Desacelerar si venia de cohete
+            if (speed < 1.8) speed = 1.8;
+
+            player.dy += GRAVITY;
+            player.y += player.dy;
+            if (player.y > GROUND_Y - player.h) {
+                player.y = GROUND_Y - player.h;
+                player.dy = 0;
+                player.grounded = true;
+                isJumping = false;
+            } else {
+                player.grounded = false;
+            }
+
+            if (player.invulnerable > 0) player.invulnerable--;
+            
+            // Score normal
+            if (!bossEntryPhase && state === 'PLAY') {
+                score += 0.1 * (speed / 1.5);
+                // Aumento progresivo dificultad
+                // ... (Omitido para mantener control manual de speed por items)
+            }
+        }
+        
+        document.getElementById('score-display').innerText = Math.floor(score);
+        let pct = Math.min(100, (score / TARGET_SCORE) * 100);
+        document.getElementById('progress-fill').style.width = pct + '%';
+
+        // --- ENTRADA DEL JEFE ---
+        if (score >= TARGET_SCORE && state === 'PLAY') {
+            state = 'BOSS';
+            bossEntryPhase = true; 
+            document.getElementById('warning-msg').style.display = 'block';
+            setTimeout(() => { document.getElementById('warning-msg').style.display = 'none'; }, 2000);
+            obstacles = []; 
+            items = [];
+            player.rocketTimer = 0; // Quitar cohete para pelea justa
+            speed = 1.8;
+        }
+
+        if (state === 'BOSS') {
+            let targetX = GAME_W - 70;
+            if (boss.x > targetX) boss.x -= 1;
+            else if (bossEntryPhase) {
+                bossEntryPhase = false; 
+                boss.active = true;
+                document.getElementById('boss-hud').style.display = 'flex';
+            }
+
+            boss.y = 70 + Math.sin(frame / 40) * 30;
+
+            // FASE 2 DEL JEFE
+            if (boss.hp <= 5 && !boss.enraged) {
+                boss.enraged = true;
+                showFloatText(boss.x, boss.y, "¡RAGE MODE!", C_RED);
+            }
+
+            let fireRate = boss.enraged ? 80 : 150; 
+            let bulletSpeed = boss.enraged ? 4.0 : 2.5;
+
+            if (boss.active && frame % fireRate === 0) {
+                let fireY = (Math.random() > 0.5) ? GROUND_Y - 14 : GROUND_Y - 40;
+                enemyBullets.push({ x: boss.x, y: fireY, w: 16, h: 10, speed: bulletSpeed });
+            }
+        }
+
+        // Spawn Loop (Centralizado arriba)
+        spawn();
+
+        for (let i = obstacles.length - 1; i >= 0; i--) {
+            let o = obstacles[i];
+            o.x -= speed;
+
+            if (o.type === 'UFO') {
+                o.y = o.startY + Math.sin(frame / 15) * 20;
+            }
+
+            // Si es cohete, destruye obstaculos
+            if (checkCollision(player, o)) {
+                if (player.rocketTimer > 0) {
+                    createParticles(o.x, o.y, '#fff', 5);
+                    obstacles.splice(i, 1);
+                    continue;
+                } else {
+                    hitPlayer();
+                }
+            }
+            if (o.x < -30) obstacles.splice(i, 1);
+        }
+
+        for (let i = enemyBullets.length - 1; i >= 0; i--) {
+            let b = enemyBullets[i];
+            b.x -= b.speed;
+            if (checkCollision(player, b)) {
+                if (player.rocketTimer > 0) {
+                    // Nada
+                } else {
+                    hitPlayer();
+                    enemyBullets.splice(i, 1);
+                }
+            }
+            if (b.x < -20) enemyBullets.splice(i, 1);
+        }
+
+        for (let i = items.length - 1; i >= 0; i--) {
+            let item = items[i];
+            item.x -= speed;
+            if (item.active && checkCollision(player, item)) {
+                item.active = false;
+                if (item.type === 'COIN') {
+                    score += 50; 
+                    showFloatText(player.x, player.y, "+50m", C_GOLD);
+                } else if (item.type === 'HEART') {
+                    if (player.hp < 3) {
+                        player.hp++;
+                        updateHearts();
+                        showFloatText(player.x, player.y, "♥", C_RED);
+                    }
+                } else if (item.type === 'AMMO') {
+                    bullets.push({ x: player.x + 20, y: player.y + 10, w: 14, h: 6, active: true });
+                    showFloatText(player.x, player.y, "¡MISIL!", '#fff');
+                } else if (item.type === 'CARD') {
+                    player.rocketTimer = 180; // 3 Segundos
+                    showFloatText(player.x, player.y, "¡COHETE!", '#0984e3');
+                }
+                items.splice(i, 1);
+            }
+            if (item.x < -20) items.splice(i, 1);
+        }
+
+        for (let i = bullets.length - 1; i >= 0; i--) {
+            let b = bullets[i];
+            b.x += 6;
+            
+            if (state === 'BOSS' && boss.active) {
+                b.y += (boss.y + 20 - b.y) * 0.08;
+            }
+
+            if (b.active && state === 'BOSS' && boss.active &&
+                b.x < boss.x + boss.w && b.x + b.w > boss.x &&
+                b.y < boss.y + boss.h && b.y + b.h > boss.y) {
+                b.active = false;
+                boss.hp--;
+                document.getElementById('boss-fill').style.width = (boss.hp * 100 / boss.maxHp) + '%';
+                createParticles(b.x, b.y, C_RED); 
+                bullets.splice(i, 1);
+                if (boss.hp <= 0) winGame();
+            }
+            if (b.x > GAME_W) bullets.splice(i, 1);
+        }
+    }
+
+    function checkCollision(p, o) {
+        let px = p.x + 4; let py = p.y + 4;
+        let pw = p.w - 8; let ph = p.h - 6;
+        return (px < o.x + o.w && px + pw > o.x && py < o.y + o.h && py + ph > o.y);
+    }
+
+    function hitPlayer() {
+        if (player.invulnerable > 0) return;
+        player.hp--;
+        player.invulnerable = 60; 
+        screenShake = 10;
+        updateHearts();
+        createParticles(player.x, player.y, '#e74c3c');
+        if (player.hp <= 0) gameOver();
+    }
+
+    function draw() {
+        ctx.save();
+        if (screenShake > 0) {
+            ctx.translate((Math.random()-0.5)*screenShake, (Math.random()-0.5)*screenShake);
+        }
+
+        drawSky(); // DIBUJAR CIELO DINAMICO
+        
+        drawEnv(); // MONTAÑAS
+        drawRect(0, GROUND_Y, GAME_W, GAME_H - GROUND_Y, C_GROUND); 
+        drawRect(0, GROUND_Y, GAME_W, 4, C_GRASS); 
+
+        if (state === 'MENU') {
+            drawElephant(player.x, GROUND_Y - 26, true);
+            ctx.restore();
+            return;
+        }
+
+        if (state === 'WIN_ANIM') {
+            drawDollars();
+            // BAILE SABROSO (Rebote + Giro rapido)
+            let danceY = Math.abs(Math.sin(frame/2) * 10);
+            let dir = (Math.floor(frame/4) % 2 === 0) ? 1 : -1;
+            
+            player.dir = dir;
+            drawElephant(player.x, player.y - danceY, true);
+            ctx.restore();
+            return;
+        }
+
+        items.forEach(i => { if(i.active) drawItem(i); });
+        obstacles.forEach(o => drawObstacle(o));
+        
+        enemyBullets.forEach(b => {
+            ctx.shadowBlur = 10; ctx.shadowColor = '#e74c3c';
+            drawRect(b.x, b.y, b.w, b.h, '#e74c3c');
+            ctx.shadowBlur = 0;
+            drawRect(b.x+2, b.y+2, b.w-4, b.h-4, '#f1c40f');
+        });
+
+        bullets.forEach(b => {
+            // DIBUJAR MISIL
+            drawRect(b.x, b.y, b.w, b.h, '#ecf0f1'); // Cuerpo
+            drawRect(b.x+b.w, b.y, 2, b.h, C_RED);   // Punta
+            drawRect(b.x, b.y-2, 2, b.h+4, '#7f8c8d'); // Aletas
+            // Estela humo
+            if (frame % 2 === 0) createParticles(b.x, b.y+2, '#95a5a6', 1);
+        });
+
+        drawElephant(player.x, player.y, true);
+        drawParticles();
+
+        if (state === 'BOSS') {
+            drawPig(boss.x, boss.y);
+        }
+        
+        drawLighting();
+        ctx.restore();
+    }
+
+    function winGame() {
+        state = 'WIN_ANIM';
+        boss.active = false;
+        endTime = Date.now();
+        let totalTime = ((endTime - startTime) / 1000).toFixed(1);
+        spawnDollars(boss.x, boss.y);
+        
+        document.getElementById('boss-hud').style.display = 'none';
+        
+        setTimeout(() => {
+            document.getElementById('dialog-box').style.display = 'block';
+            document.getElementById('dialog-box').innerHTML = 
+                `<h1>¡VICTORIA!</h1>
+                 HAS RECUPERADO LA ECONOMÍA.<br>
+                 ¡BAILES SABROSOS!<br><br>
+                 Tiempo: ${totalTime}s<br><br>
+                 <button onclick="location.reload()">MENU</button>`;
+        }, 4000);
+    }
+
+    function gameOver() {
+        state = 'GAMEOVER';
+        document.getElementById('overlay').style.display = 'flex';
+        let msg = (score < TARGET_SCORE) ? "NO LLEGASTE AL JEFE." : "EL GENERAL CERDO TE VENCIÓ.";
+        document.querySelector('#overlay h1').innerText = "GAME OVER";
+        document.querySelector('#overlay p').innerHTML = msg;
+        document.querySelector('#overlay button').innerText = "REINTENTAR";
+    }
+
+    function startGame() { 
+        player.x = 40;
+        player.dir = 1;
+        reset(); 
+    }
+
+    function loop() {
+        update();
+        draw();
+        requestAnimationFrame(loop);
+    }
+
+    function startJump() {
+        if ((state === 'MENU' || state === 'GAMEOVER' || state === 'WIN') && state !== 'WIN_ANIM') {
+            startGame();
+        } else if ((state === 'PLAY' || state === 'BOSS') && player.grounded) {
+            player.dy = JUMP_FORCE; 
+            isJumping = true;
+            player.grounded = false;
+        }
+    }
+
+    function endJump() {
+        // CORTE DE SALTO (Variable Jump Height)
+        if (state === 'PLAY' || state === 'BOSS') {
+            if (player.dy < -2) { // Si va subiendo rápido
+                player.dy = -2; // Corta el impulso (Short Hop)
+            }
+            isJumping = false;
+        }
+    }
+
+    window.addEventListener('keydown', (e) => {
+        if (e.code === 'Space') startJump();
+    });
+    window.addEventListener('keyup', (e) => {
+        if (e.code === 'Space') endJump();
+    });
+    
+    window.addEventListener('mousedown', startJump);
+    window.addEventListener('mouseup', endJump);
+    window.addEventListener('touchstart', (e) => { e.preventDefault(); startJump(); }, {passive: false});
+    window.addEventListener('touchend', (e) => { e.preventDefault(); endJump(); });
+
+    initBackground();
+    loop();
+
+</script>
+</body>
+</html>
