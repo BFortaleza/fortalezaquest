@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fortaleza Quest - Rocket Update</title>
+    <title>Fortaleza Quest - Final Mix</title>
     <style>
         :root {
             --c0: #0f380f; 
@@ -12,7 +12,7 @@
             --c3: #9bbc0f; 
             --gold: #f1c40f;      
             --heart: #ff7675;     
-            --card: #0984e3;      /* Azul Tarjeta */
+            --card: #0984e3;
             --text: #2d3436;      
         }
 
@@ -240,9 +240,10 @@
             <p>
                 <b>MISIÓN:</b> RECUPERAR LA ECONOMÍA.<br>
                 <b>META:</b> 2000 METROS.<br><br>
-                Click Corto: <b>Salto Pequeño</b><br>
+                Click Rápido: <b>Salto Corto</b><br>
                 Click Largo: <b>Salto Alto</b><br>
-                [💳] TARJETA: <b>MODO COHETE INVENCIBLE</b><br>
+                [💳] TARJETA: <b>MODO COHETE (Raro)</b><br>
+                Evita las nubes grises al frenar.
             </p>
             <button onclick="startGame()">JUGAR AHORA</button>
         </div>
@@ -254,6 +255,7 @@
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     
+    // Resolución HD Pixel
     const GAME_W = 320; 
     const GAME_H = 240;
     canvas.width = GAME_W;
@@ -270,14 +272,17 @@
     const C_CARD = '#0984e3';
 
     // Ciclo Día/Noche
-    const SKY_DAY = {r: 135, g: 206, b: 235}; // #87CEEB
-    const SKY_NIGHT = {r: 20, g: 20, b: 60};  // #14143C
+    const SKY_DAY = {r: 135, g: 206, b: 235}; 
+    const SKY_NIGHT = {r: 20, g: 20, b: 60};  
     
     let state = 'MENU'; 
     let frame = 0;
     let score = 0;
+    let worldTime = 0; // Tiempo del mundo independiente del score
     let speed = 1.8; 
-    const MAX_SPEED = 4.0; 
+    const BASE_SPEED = 1.8;
+    const MAX_SPEED = 4.2; 
+    const ROCKET_SPEED = 8.0;
     let bossEntryPhase = false; 
     let startTime = 0;
     let screenShake = 0;
@@ -285,7 +290,7 @@
     let player = { 
         x: 40, y: 0, w: 24, h: 20, dy: 0, grounded: false, dir: 1,
         hp: 3, maxHp: 3, invulnerable: 0,
-        rocketTimer: 0 // Nuevo estado de cohete
+        rocketTimer: 0 
     }; 
     
     let obstacles = [];
@@ -302,9 +307,9 @@
         active: false, enraged: false 
     }; 
     
-    // --- FÍSICAS FLOTANTES (CONTROL TOTAL) ---
+    // --- FÍSICAS REAJUSTADAS ---
     const GRAVITY = 0.25; 
-    const JUMP_FORCE = -7.2; 
+    const JUMP_FORCE = -7.5; 
     const GROUND_Y = GAME_H - 32;
     const TARGET_SCORE = 2000; 
 
@@ -315,9 +320,17 @@
         ctx.fillRect(Math.floor(x), Math.floor(y), w, h);
     }
 
+    function drawCircle(x, y, r, c) {
+        ctx.fillStyle = c;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
     // --- EFECTOS VISUALES ---
     function drawSky() {
-        let cycle = (score % 2000) / 2000; 
+        // Ciclo basado en worldTime, no en score, para evitar saltos
+        let cycle = (worldTime % 4000) / 4000; 
         
         let r, g, b;
         let isNight = false;
@@ -375,9 +388,9 @@
             ctx.fillStyle = 'rgba(255,255,255,0.7)';
             for(let i=0; i<30; i++) {
                 if ((frame + i*10) % 150 > 70) { 
-                    let sx = (i * 37) % GAME_W;
-                    let sy = (i * 23) % (GAME_H/2);
-                    ctx.fillRect(sx, sy, 1, 1);
+                    let starX = (i * 37) % GAME_W;
+                    let starY = (i * 23) % (GAME_H/2);
+                    ctx.fillRect(starX, starY, 1, 1);
                 }
             }
         }
@@ -413,7 +426,8 @@
                 x: x, y: y,
                 vx: (Math.random() - 0.5) * 10,
                 vy: -5 - Math.random() * 5,
-                w: 8, h: 4
+                w: 8, h: 4,
+                rot: Math.random() * 360
             });
         }
     }
@@ -434,6 +448,12 @@
     }
 
     function drawLighting() {
+        let ray = ctx.createLinearGradient(0, 0, GAME_W, GAME_H);
+        ray.addColorStop(0, 'rgba(255, 255, 255, 0.08)');
+        ray.addColorStop(0.5, 'rgba(255, 255, 255, 0)');
+        ctx.fillStyle = ray;
+        ctx.fillRect(0, 0, GAME_W, GAME_H);
+
         let vig = ctx.createRadialGradient(GAME_W/2, GAME_H/2, GAME_W/3, GAME_W/2, GAME_H/2, GAME_W);
         vig.addColorStop(0, 'rgba(0,0,0,0)');
         vig.addColorStop(1, 'rgba(0,0,0,0.4)');
@@ -443,12 +463,9 @@
 
     // --- SPRITE ELEFANTE ---
     function drawElephant(x, y, isWalking) {
-        // En modo cohete, no parpadea, brilla
         if (player.rocketTimer > 0) {
-            ctx.shadowBlur = 10; ctx.shadowColor = '#00ffff';
-        } else {
-            if (player.invulnerable > 0 && Math.floor(frame / 4) % 2 === 0) return;
-        }
+            ctx.shadowBlur = 15; ctx.shadowColor = '#00ffff';
+        } else if (player.invulnerable > 0 && Math.floor(frame / 4) % 2 === 0) return;
 
         let cycle = isWalking ? Math.floor(frame / 8) % 4 : 0;
         let bounce = isWalking ? (cycle % 2 === 0 ? 0 : -1) : 0;
@@ -458,24 +475,21 @@
         ctx.save();
         if (flip) { ctx.translate(x + 24, y); ctx.scale(-1, 1); x = 0; }
 
-        // Si es cohete, inclinar un poco
         if (player.rocketTimer > 0) {
-            ctx.translate(x + 15, y + 10);
+            ctx.translate(x + 12, y + 10);
             ctx.rotate(-0.1);
-            ctx.translate(-(x + 15), -(y + 10));
+            ctx.translate(-(x + 12), -(y + 10));
             // Fuego cohete
             if (frame % 4 < 2) {
-                drawRect(x - 8, y + 10, 8, 6, '#e67e22');
-                drawRect(x - 12, y + 12, 4, 2, '#f1c40f');
+                drawRect(x - 8, y + 8, 8, 8, '#e67e22');
+                drawRect(x - 12, y + 10, 4, 4, '#f1c40f');
             }
         }
 
-        // Cuerpo
         drawRect(x + 2, y + 8, 18, 12, C_BLACK); 
         drawRect(x + 3, y + 9, 16, 10, C_ELEPHANT); 
         drawRect(x + 5, y + 9, 10, 3, '#fff'); 
 
-        // Cabeza
         drawRect(x + 12, y + 2, 12, 12, C_BLACK);
         drawRect(x + 13, y + 3, 10, 10, C_ELEPHANT);
 
@@ -483,7 +497,6 @@
         drawRect(x + 10, y + 4, 6 - earFlap, 8, C_BLACK); 
         drawRect(x + 11, y + 5, 4 - earFlap, 6, '#ffcdd2'); 
 
-        // Trompa
         drawRect(x + 21, y + 6, 4, 6, C_BLACK); 
         drawRect(x + 22, y + 6, 2, 6, C_ELEPHANT); 
         
@@ -502,7 +515,6 @@
 
         let legL = (cycle === 1) ? -1 : 0;
         let legR = (cycle === 3) ? 1 : 0;
-        
         drawRect(x + 4 + legL, y + 18, 4, 4, C_BLACK); 
         drawRect(x + 5 + legL, y + 18, 2, 3, C_ELEPHANT);
         drawRect(x + 14 + legR, y + 18, 4, 4, C_BLACK); 
@@ -541,12 +553,10 @@
             drawRect(x + 1, y + 10, 3, 4, '#7f8c8d'); 
             drawRect(x + 12, y + 10, 3, 4, '#7f8c8d');
         } else if (i.type === 'CARD') {
-            // TARJETA DE CREDITO AZUL
             ctx.shadowColor = C_CARD;
-            drawRect(x, y, 16, 10, C_CARD);
-            drawRect(x, y, 16, 1, '#fff');
-            drawRect(x+2, y+2, 3, 2, '#f1c40f'); // Chip
-            drawRect(x+2, y+6, 8, 1, '#fff'); // Texto
+            drawRect(x, y, 18, 11, C_CARD);
+            drawRect(x, y, 18, 1, '#fff');
+            drawRect(x+2, y+2, 4, 3, '#f1c40f');
         }
         ctx.shadowBlur = 0; 
     }
@@ -570,6 +580,24 @@
             drawRect(x + 2, y + 2, 12, 1, '#d35400');
             drawRect(x + 2, y + 13, 12, 1, '#d35400');
             drawRect(x + 2, y + 2, 12, 12, 'rgba(0,0,0,0.1)');
+        } else if (o.type === 'TALL_CRATE') {
+             // Doble caja (Alta)
+            drawRect(x, y, 16, 32, '#d35400');
+            drawRect(x+1, y+1, 14, 14, '#e67e22'); // Caja arriba
+            drawRect(x+1, y+17, 14, 14, '#e67e22'); // Caja abajo
+            drawRect(x+1, y+16, 14, 1, C_BLACK); // Division
+        } else if (o.type === 'CACTUS') {
+            // Cactus Alto
+            drawRect(x + 4, y, 6, 32, '#27ae60'); // Tallo central
+            drawRect(x, y + 10, 4, 2, '#27ae60'); // Brazo I
+            drawRect(x, y + 4, 2, 8, '#27ae60');  // Brazo I sube
+            drawRect(x + 10, y + 14, 4, 2, '#27ae60'); // Brazo D
+            drawRect(x + 12, y + 8, 2, 8, '#27ae60'); // Brazo D sube
+            // Espinas
+            if (frame % 8 < 4) {
+                drawRect(x+3, y+5, 1,1, '#fff');
+                drawRect(x+9, y+20, 1,1, '#fff');
+            }
         } else if (o.type === 'SPIKE') {
             drawRect(x, y + 8, 16, 8, C_BLACK);
             drawRect(x + 2, y, 2, 8, '#bdc3c7');
@@ -632,11 +660,18 @@
         });
         clouds.forEach(c => {
             let x = c.x, y = c.y;
-            drawRect(x + 8, y + 4, 24, 12, 'rgba(255,255,255,0.7)');
-            drawRect(x + 12, y, 10, 6, 'rgba(255,255,255,0.7)');
-            drawRect(x + 4, y + 6, 6, 8, 'rgba(255,255,255,0.7)');
-            drawRect(x + 30, y + 6, 6, 8, 'rgba(255,255,255,0.7)');
+            // Nubes Circulares
+            drawCircle(x, y, 12, 'rgba(255,255,255,0.7)');
+            drawCircle(x+15, y+5, 14, 'rgba(255,255,255,0.7)');
+            drawCircle(x+25, y-2, 12, 'rgba(255,255,255,0.7)');
         });
+    }
+
+    function drawCircle(x, y, r, c) {
+        ctx.fillStyle = c;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI*2);
+        ctx.fill();
     }
 
     function reset() {
@@ -644,13 +679,14 @@
         player.dy = 0;
         player.hp = 3;
         player.invulnerable = 0;
-        player.rocketTimer = 0; // Reset rocket
+        player.rocketTimer = 0; 
         obstacles = [];
         items = [];
         bullets = [];
         enemyBullets = [];
         dollars = [];
         score = 0;
+        worldTime = 0;
         speed = 1.8; 
         boss.active = false;
         boss.enraged = false;
@@ -697,20 +733,15 @@
         if (state !== 'PLAY' && state !== 'BOSS') return;
         if (bossEntryPhase) return; 
 
-        // SISTEMA DE SPAWN INTELIGENTE (1 por turno)
-        // Decidimos que spawnear: Item O Obstaculo, no ambos.
-        // Frecuencia base de spawn
-        let spawnRate = Math.floor(250 / speed);
+        let spawnRate = Math.floor(220 / speed);
         if (state === 'BOSS') spawnRate = 60;
-
         if (frame % spawnRate !== 0) return;
 
         let r = Math.random();
         let spawnedItem = false;
 
-        // 1. ITEMS (PRIORIDAD)
+        // 1. ITEMS (PRIORIDAD) - NUNCA SOBRE OBSTACULOS
         if (state === 'BOSS') {
-            // Boss siempre necesita ammo o vida
             if (r > 0.4) {
                  items.push({ x: GAME_W, y: GROUND_Y - 40 - Math.random()*20, w: 16, h: 14, type: 'AMMO', active: true });
                  spawnedItem = true;
@@ -721,42 +752,41 @@
         } else {
             // Fase Normal: Probabilidad de Item 30%
             if (r > 0.70) {
-                // Seleccionar Item
                 let subR = Math.random();
                 let iType = 'COIN';
-                let iW = 10; let iH = 10;
+                let iW = 12; let iH = 12;
                 
-                if (subR > 0.95) { // 5% Tarjeta
-                    iType = 'CARD'; iW = 16; iH = 10;
-                } else if (player.hp < 3 && subR > 0.7) { // Mas vida si herido
+                // TARJETA DE CREDITO: SOLO 2% PROBABILIDAD (Muy Rara)
+                if (subR > 0.98) { 
+                    iType = 'CARD'; iW = 18; iH = 11;
+                } else if (player.hp < 3 && subR > 0.7) { 
                     iType = 'HEART'; iW = 14; iH = 12;
                 }
                 
-                // Altura aleatoria pero alcanzable
+                // Altura aleatoria para variar saltos
                 let iY = GROUND_Y - 30 - Math.random() * 40; 
                 items.push({ x: GAME_W, y: iY, w: iW, h: iH, type: iType, active: true });
                 spawnedItem = true;
             }
         }
 
-        // 2. OBSTACULOS (Solo si no spawneamos item)
-        // EXCEPCION: En Boss no spawneamos obstaculos normales aqui, el boss dispara.
+        // 2. OBSTACULOS (SOLO SI NO HAY ITEM - ANTISOLAPAMIENTO)
         if (state === 'PLAY' && !spawnedItem) {
             let type = 'ROCK';
             let yPos = GROUND_Y - 14; 
-            let w = 14, h = 12; 
+            let w = 14; let h = 12; 
             
             // Variedad Garantizada
-            // Mayor prob de aereos
             let rObs = Math.random();
-            if (rObs > 0.75) { 
+            if (rObs > 0.70) { 
                 if (Math.random() > 0.5) {
-                    type = 'BIRD'; yPos = GROUND_Y - 45 - Math.random()*20; w = 16; h = 10;
+                    type = 'BIRD'; yPos = GROUND_Y - 40 - Math.random()*40; w = 16; h = 10;
                 } else {
-                    type = 'UFO'; yPos = GROUND_Y - 60 - Math.random()*10; w = 16; h = 10;
+                    type = 'UFO'; yPos = GROUND_Y - 70 - Math.random()*20; w = 16; h = 10;
                 }
             }
-            else if (rObs > 0.60) { type = 'SPIKE'; w = 16; h = 16; yPos = GROUND_Y - 16; }
+            else if (rObs > 0.60) { type = 'TALL_CRATE'; w = 16; h = 32; yPos = GROUND_Y - 32; } // DOBLE ALTURA
+            else if (rObs > 0.50) { type = 'CACTUS'; w = 14; h = 32; yPos = GROUND_Y - 32; } // ALTO
             else if (rObs > 0.40) { type = 'BUSH'; w = 18; h = 14; }
             else if (rObs > 0.20) { type = 'CRATE'; w = 16; h = 16; yPos = GROUND_Y - 16; }
             else { type = 'ROCK'; }
@@ -769,6 +799,9 @@
     function update() {
         frame++;
         
+        // Tiempo mundial para cielo suave
+        if (state === 'PLAY' || state === 'BOSS') worldTime += 1;
+
         if (screenShake > 0) screenShake--;
 
         clouds.forEach(c => { c.x -= c.speed; if (c.x < -40) c.x = GAME_W; });
@@ -792,34 +825,26 @@
         if (player.rocketTimer > 0) {
             // MODO COHETE
             player.rocketTimer--;
-            player.y += (GAME_H/2 - player.y) * 0.1; // Flotar al centro
+            player.y += (GAME_H/2 - player.y) * 0.1; 
             player.dy = 0;
-            createParticles(player.x, player.y + 10, '#e74c3c', 1);
-            speed = 8.0; // SUPER VELOCIDAD
-            score += 0.5; // Puntos extra rapido
+            speed = ROCKET_SPEED;
+            score += 0.5;
+            createParticles(player.x, player.y + 10, '#e74c3c', 2);
         } else {
-            // FISICA NORMAL
-            if (speed > 1.8 && frame % 10 === 0) speed -= 0.1; // Desacelerar si venia de cohete
-            if (speed < 1.8) speed = 1.8;
+            // FRENADO SUAVE
+            if (speed > BASE_SPEED) speed -= 0.15;
+            if (speed < BASE_SPEED) speed = BASE_SPEED;
 
             player.dy += GRAVITY;
             player.y += player.dy;
             if (player.y > GROUND_Y - player.h) {
-                player.y = GROUND_Y - player.h;
-                player.dy = 0;
-                player.grounded = true;
-                isJumping = false;
-            } else {
-                player.grounded = false;
-            }
-
-            if (player.invulnerable > 0) player.invulnerable--;
+                player.y = GROUND_Y - player.h; player.dy = 0; player.grounded = true; isJumping = false;
+            } else { player.grounded = false; }
             
-            // Score normal
+            if (player.invulnerable > 0) player.invulnerable--;
             if (!bossEntryPhase && state === 'PLAY') {
                 score += 0.1 * (speed / 1.5);
-                // Aumento progresivo dificultad
-                // ... (Omitido para mantener control manual de speed por items)
+                if (frame % 600 === 0 && speed < MAX_SPEED) speed += 0.1;
             }
         }
         
@@ -827,102 +852,54 @@
         let pct = Math.min(100, (score / TARGET_SCORE) * 100);
         document.getElementById('progress-fill').style.width = pct + '%';
 
-        // --- ENTRADA DEL JEFE ---
         if (score >= TARGET_SCORE && state === 'PLAY') {
-            state = 'BOSS';
-            bossEntryPhase = true; 
-            document.getElementById('warning-msg').style.display = 'block';
+            state = 'BOSS'; bossEntryPhase = true; document.getElementById('warning-msg').style.display = 'block';
             setTimeout(() => { document.getElementById('warning-msg').style.display = 'none'; }, 2000);
-            obstacles = []; 
-            items = [];
-            player.rocketTimer = 0; // Quitar cohete para pelea justa
-            speed = 1.8;
+            obstacles = []; items = []; player.rocketTimer = 0; speed = BASE_SPEED;
         }
 
         if (state === 'BOSS') {
             let targetX = GAME_W - 70;
             if (boss.x > targetX) boss.x -= 1;
-            else if (bossEntryPhase) {
-                bossEntryPhase = false; 
-                boss.active = true;
-                document.getElementById('boss-hud').style.display = 'flex';
-            }
-
+            else if (bossEntryPhase) { bossEntryPhase = false; boss.active = true; document.getElementById('boss-hud').style.display = 'flex'; }
             boss.y = 70 + Math.sin(frame / 40) * 30;
-
-            // FASE 2 DEL JEFE
-            if (boss.hp <= 5 && !boss.enraged) {
-                boss.enraged = true;
-                showFloatText(boss.x, boss.y, "¡RAGE MODE!", C_RED);
-            }
-
+            if (boss.hp <= 5 && !boss.enraged) { boss.enraged = true; showFloatText(boss.x, boss.y, "¡RAGE MODE!", C_RED); }
             let fireRate = boss.enraged ? 80 : 150; 
-            let bulletSpeed = boss.enraged ? 4.0 : 2.5;
-
             if (boss.active && frame % fireRate === 0) {
-                let fireY = (Math.random() > 0.5) ? GROUND_Y - 14 : GROUND_Y - 40;
-                enemyBullets.push({ x: boss.x, y: fireY, w: 16, h: 10, speed: bulletSpeed });
+                enemyBullets.push({ x: boss.x, y: (Math.random() > 0.5) ? GROUND_Y - 14 : GROUND_Y - 40, w: 16, h: 10, speed: boss.enraged ? 3.5 : 2.5 });
             }
         }
 
-        // Spawn Loop (Centralizado arriba)
         spawn();
 
         for (let i = obstacles.length - 1; i >= 0; i--) {
-            let o = obstacles[i];
-            o.x -= speed;
-
-            if (o.type === 'UFO') {
-                o.y = o.startY + Math.sin(frame / 15) * 20;
-            }
-
-            // Si es cohete, destruye obstaculos
+            let o = obstacles[i]; o.x -= speed;
+            if (o.type === 'UFO') o.y = o.startY + Math.sin(frame / 15) * 20;
             if (checkCollision(player, o)) {
-                if (player.rocketTimer > 0) {
-                    createParticles(o.x, o.y, '#fff', 5);
-                    obstacles.splice(i, 1);
-                    continue;
-                } else {
-                    hitPlayer();
-                }
+                if (player.rocketTimer > 0) { createParticles(o.x, o.y, '#fff', 5); obstacles.splice(i, 1); continue; }
+                else hitPlayer();
             }
             if (o.x < -30) obstacles.splice(i, 1);
         }
 
         for (let i = enemyBullets.length - 1; i >= 0; i--) {
-            let b = enemyBullets[i];
-            b.x -= b.speed;
+            let b = enemyBullets[i]; b.x -= b.speed;
             if (checkCollision(player, b)) {
-                if (player.rocketTimer > 0) {
-                    // Nada
-                } else {
-                    hitPlayer();
-                    enemyBullets.splice(i, 1);
-                }
+                 if (player.rocketTimer <= 0) { hitPlayer(); enemyBullets.splice(i, 1); }
             }
             if (b.x < -20) enemyBullets.splice(i, 1);
         }
 
         for (let i = items.length - 1; i >= 0; i--) {
-            let item = items[i];
-            item.x -= speed;
+            let item = items[i]; item.x -= speed;
             if (item.active && checkCollision(player, item)) {
                 item.active = false;
-                if (item.type === 'COIN') {
-                    score += 50; 
-                    showFloatText(player.x, player.y, "+50m", C_GOLD);
-                } else if (item.type === 'HEART') {
-                    if (player.hp < 3) {
-                        player.hp++;
-                        updateHearts();
-                        showFloatText(player.x, player.y, "♥", C_RED);
-                    }
-                } else if (item.type === 'AMMO') {
-                    bullets.push({ x: player.x + 20, y: player.y + 10, w: 14, h: 6, active: true });
-                    showFloatText(player.x, player.y, "¡MISIL!", '#fff');
-                } else if (item.type === 'CARD') {
-                    player.rocketTimer = 180; // 3 Segundos
-                    showFloatText(player.x, player.y, "¡COHETE!", '#0984e3');
+                if (item.type === 'COIN') { score += 50; showFloatText(player.x, player.y, "+50m", C_GOLD); }
+                else if (item.type === 'HEART') { if (player.hp < 3) player.hp++; updateHearts(); showFloatText(player.x, player.y, "♥", C_RED); }
+                else if (item.type === 'AMMO') { bullets.push({ x: player.x + 20, y: player.y + 10, w: 14, h: 6, active: true }); showFloatText(player.x, player.y, "¡MISIL!", '#fff'); }
+                else if (item.type === 'CARD') { 
+                    player.rocketTimer = 240; player.invulnerable = 260; // 4 segundos invencible
+                    showFloatText(player.x, player.y, "¡COHETE!", C_CARD); 
                 }
                 items.splice(i, 1);
             }
@@ -930,21 +907,11 @@
         }
 
         for (let i = bullets.length - 1; i >= 0; i--) {
-            let b = bullets[i];
-            b.x += 6;
-            
-            if (state === 'BOSS' && boss.active) {
-                b.y += (boss.y + 20 - b.y) * 0.08;
-            }
-
-            if (b.active && state === 'BOSS' && boss.active &&
-                b.x < boss.x + boss.w && b.x + b.w > boss.x &&
-                b.y < boss.y + boss.h && b.y + b.h > boss.y) {
-                b.active = false;
-                boss.hp--;
-                document.getElementById('boss-fill').style.width = (boss.hp * 100 / boss.maxHp) + '%';
-                createParticles(b.x, b.y, C_RED); 
-                bullets.splice(i, 1);
+            let b = bullets[i]; b.x += 6;
+            if (state === 'BOSS' && boss.active) b.y += (boss.y + 20 - b.y) * 0.08;
+            if (b.active && state === 'BOSS' && boss.active && checkCollision(b, boss)) {
+                b.active = false; boss.hp--; document.getElementById('boss-fill').style.width = (boss.hp * 10) + '%';
+                createParticles(b.x, b.y, C_RED); bullets.splice(i, 1);
                 if (boss.hp <= 0) winGame();
             }
             if (b.x > GAME_W) bullets.splice(i, 1);
@@ -952,157 +919,90 @@
     }
 
     function checkCollision(p, o) {
-        let px = p.x + 4; let py = p.y + 4;
-        let pw = p.w - 8; let ph = p.h - 6;
+        let px = p.x + 4; let py = p.y + 4; let pw = p.w - 8; let ph = p.h - 6;
         return (px < o.x + o.w && px + pw > o.x && py < o.y + o.h && py + ph > o.y);
     }
 
     function hitPlayer() {
-        if (player.invulnerable > 0) return;
-        player.hp--;
-        player.invulnerable = 60; 
-        screenShake = 10;
-        updateHearts();
+        if (player.invulnerable > 0 || player.rocketTimer > 0) return;
+        player.hp--; player.invulnerable = 80; screenShake = 10; updateHearts();
         createParticles(player.x, player.y, '#e74c3c');
         if (player.hp <= 0) gameOver();
     }
 
     function draw() {
-        ctx.save();
-        if (screenShake > 0) {
-            ctx.translate((Math.random()-0.5)*screenShake, (Math.random()-0.5)*screenShake);
-        }
-
-        drawSky(); // DIBUJAR CIELO DINAMICO
-        
-        drawEnv(); // MONTAÑAS
+        ctx.save(); if (screenShake > 0) ctx.translate((Math.random()-0.5)*screenShake, (Math.random()-0.5)*screenShake);
+        drawSky(); drawEnv(); 
         drawRect(0, GROUND_Y, GAME_W, GAME_H - GROUND_Y, C_GROUND); 
-        drawRect(0, GROUND_Y, GAME_W, 4, C_GRASS); 
+        ctx.fillStyle = C_GRASS; ctx.fillRect(0, GROUND_Y, GAME_W, 6); // Pasto
 
-        if (state === 'MENU') {
-            drawElephant(player.x, GROUND_Y - 26, true);
-            ctx.restore();
-            return;
-        }
-
+        if (state === 'MENU') { drawElephant(player.x, GROUND_Y - 26, true); ctx.restore(); return; }
         if (state === 'WIN_ANIM') {
-            drawDollars();
-            // BAILE SABROSO (Rebote + Giro rapido)
-            let danceY = Math.abs(Math.sin(frame/2) * 10);
-            let dir = (Math.floor(frame/4) % 2 === 0) ? 1 : -1;
-            
-            player.dir = dir;
-            drawElephant(player.x, player.y - danceY, true);
-            ctx.restore();
-            return;
+            drawDollars(); let danceY = Math.abs(Math.sin(frame/2) * 10);
+            player.dir = (Math.floor(frame/4) % 2 === 0) ? 1 : -1;
+            drawElephant(GAME_W/2 - 12, player.y - danceY, true); ctx.restore(); return;
         }
 
         items.forEach(i => { if(i.active) drawItem(i); });
         obstacles.forEach(o => drawObstacle(o));
-        
         enemyBullets.forEach(b => {
-            ctx.shadowBlur = 10; ctx.shadowColor = '#e74c3c';
-            drawRect(b.x, b.y, b.w, b.h, '#e74c3c');
-            ctx.shadowBlur = 0;
+            ctx.shadowBlur = 10; ctx.shadowColor = '#e74c3c'; drawRect(b.x, b.y, b.w, b.h, '#e74c3c'); ctx.shadowBlur = 0;
             drawRect(b.x+2, b.y+2, b.w-4, b.h-4, '#f1c40f');
         });
-
         bullets.forEach(b => {
-            // DIBUJAR MISIL
-            drawRect(b.x, b.y, b.w, b.h, '#ecf0f1'); // Cuerpo
-            drawRect(b.x+b.w, b.y, 2, b.h, C_RED);   // Punta
-            drawRect(b.x, b.y-2, 2, b.h+4, '#7f8c8d'); // Aletas
-            // Estela humo
+            drawRect(b.x, b.y, b.w, b.h, '#ecf0f1'); drawRect(b.x+b.w, b.y, 2, b.h, C_RED);
             if (frame % 2 === 0) createParticles(b.x, b.y+2, '#95a5a6', 1);
         });
-
-        drawElephant(player.x, player.y, true);
-        drawParticles();
-
-        if (state === 'BOSS') {
-            drawPig(boss.x, boss.y);
-        }
-        
-        drawLighting();
-        ctx.restore();
+        drawElephant(player.x, player.y, true); drawParticles();
+        if (state === 'BOSS') drawPig(boss.x, boss.y);
+        drawLighting(); ctx.restore();
     }
 
     function winGame() {
-        state = 'WIN_ANIM';
-        boss.active = false;
-        endTime = Date.now();
+        state = 'WIN_ANIM'; boss.active = false; endTime = Date.now();
         let totalTime = ((endTime - startTime) / 1000).toFixed(1);
         spawnDollars(boss.x, boss.y);
-        
         document.getElementById('boss-hud').style.display = 'none';
-        
         setTimeout(() => {
             document.getElementById('dialog-box').style.display = 'block';
-            document.getElementById('dialog-box').innerHTML = 
-                `<h1>¡VICTORIA!</h1>
-                 HAS RECUPERADO LA ECONOMÍA.<br>
-                 ¡BAILES SABROSOS!<br><br>
-                 Tiempo: ${totalTime}s<br><br>
-                 <button onclick="location.reload()">MENU</button>`;
+            document.getElementById('dialog-box').innerHTML = `<h1>¡VICTORIA!</h1>HAS RECUPERADO LA ECONOMÍA.<br>Tiempo: ${totalTime}s<br><br><button onclick="location.reload()">MENU</button>`;
         }, 4000);
     }
 
     function gameOver() {
-        state = 'GAMEOVER';
-        document.getElementById('overlay').style.display = 'flex';
+        state = 'GAMEOVER'; document.getElementById('overlay').style.display = 'flex';
         let msg = (score < TARGET_SCORE) ? "NO LLEGASTE AL JEFE." : "EL GENERAL CERDO TE VENCIÓ.";
         document.querySelector('#overlay h1').innerText = "GAME OVER";
         document.querySelector('#overlay p').innerHTML = msg;
-        document.querySelector('#overlay button').innerText = "REINTENTAR";
     }
 
-    function startGame() { 
-        player.x = 40;
-        player.dir = 1;
-        reset(); 
-    }
-
-    function loop() {
-        update();
-        draw();
-        requestAnimationFrame(loop);
-    }
+    function startGame() { player.x = 40; player.dir = 1; reset(); }
+    function loop() { update(); draw(); requestAnimationFrame(loop); }
 
     function startJump() {
-        if ((state === 'MENU' || state === 'GAMEOVER' || state === 'WIN') && state !== 'WIN_ANIM') {
-            startGame();
-        } else if ((state === 'PLAY' || state === 'BOSS') && player.grounded) {
-            player.dy = JUMP_FORCE; 
-            isJumping = true;
-            player.grounded = false;
+        if ((state === 'MENU' || state === 'GAMEOVER' || state === 'WIN') && state !== 'WIN_ANIM') startGame();
+        else if ((state === 'PLAY' || state === 'BOSS') && player.grounded && player.rocketTimer <= 0) {
+            player.dy = JUMP_FORCE; isJumping = true; player.grounded = false;
         }
     }
 
     function endJump() {
-        // CORTE DE SALTO (Variable Jump Height)
+        // CORTE DE SALTO MUY RAPIDO (Para saltos pequeños)
         if (state === 'PLAY' || state === 'BOSS') {
-            if (player.dy < -2) { // Si va subiendo rápido
-                player.dy = -2; // Corta el impulso (Short Hop)
+            if (player.dy < -2) {
+                player.dy *= 0.3; // Corte agresivo
             }
             isJumping = false;
         }
     }
 
-    window.addEventListener('keydown', (e) => {
-        if (e.code === 'Space') startJump();
-    });
-    window.addEventListener('keyup', (e) => {
-        if (e.code === 'Space') endJump();
-    });
-    
-    window.addEventListener('mousedown', startJump);
-    window.addEventListener('mouseup', endJump);
+    window.addEventListener('keydown', (e) => { if (e.code === 'Space') startJump(); });
+    window.addEventListener('keyup', (e) => { if (e.code === 'Space') endJump(); });
+    window.addEventListener('mousedown', startJump); window.addEventListener('mouseup', endJump);
     window.addEventListener('touchstart', (e) => { e.preventDefault(); startJump(); }, {passive: false});
     window.addEventListener('touchend', (e) => { e.preventDefault(); endJump(); });
 
-    initBackground();
-    loop();
-
+    initBackground(); loop();
 </script>
 </body>
 </html>
